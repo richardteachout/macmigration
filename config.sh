@@ -18,7 +18,12 @@ if [[ -z "${BACKUP_ROOT:-}" ]]; then
 fi
 
 # Per-user home rsync target (mirrors the home tree).
-: "${HOME_MIRROR:=$BACKUP_ROOT/home/$(whoami)}"
+# OLD_USER is the username on the OLD Mac. For backup, this is always
+# whoami. For restore, restore.sh overrides this after reading the manifest
+# so the rsync source can live under /home/<oldname>/ even when the new
+# Mac's username differs.
+: "${OLD_USER:=$(whoami)}"
+: "${HOME_MIRROR:=$BACKUP_ROOT/home/$OLD_USER}"
 
 # Where exported manifests / plists / dotfiles snapshots go.
 : "${META_DIR:=$BACKUP_ROOT/meta}"

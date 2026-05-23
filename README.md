@@ -23,7 +23,7 @@ destructive-ish steps.
 `backup.sh` and `restore.sh` are split into numbered sections. Run all of them
 or use `--only <section>` / `--skip <section>` to do one at a time.
 
-Sections: `brew`, `apps`, `langs`, `vscode`, `defaults`, `services`, `dotfiles`, `rsync`.
+Sections: `brew`, `apps`, `langs`, `vscode`, `defaults`, `services`, `system` (sudo, opt-in), `dotfiles`, `rsync`.
 
 `restore.sh` also runs a **preflight** (Xcode CLT + Homebrew + `mas`)
 unconditionally — even with `--only`/`--skip` — because every section needs at
@@ -138,6 +138,79 @@ killall Dock Finder SystemUIServer
 Then sign into Apple ID / iCloud — Messages, Mail, Photos, and iCloud Drive
 re-sync on their own (they were deliberately excluded from the rsync to avoid
 huge transfer and sync conflicts).
+
+---
+
+## Different usernames between old and new Mac
+
+The kit handles the case where your new Mac uses a different short username
+(e.g. `oldjoe` → `joe`).
+
+**On the old Mac:** nothing special — `backup.sh` writes an identity block
+into `meta/manifest.txt` (uid, gid, primary group, full group list, etc.)
+and stores the home mirror under `home/<oldname>/`.
+
+**On the new Mac:** `restore.sh` reads the manifest:
+
+- If the new user's name matches the manifest, restore proceeds normally.
+- Otherwise, it tries `BACKUP_ROOT/home/<manifest user>`. If that exists, it
+  uses that path. If not, it lists what's available under `home/` and
+  prompts: `Enter old username:`.
+- You can also pre-set it: `OLD_USER=oldjoe ./restore.sh`.
+
+What the cross-user path does differently:
+
+- **Ownership:** the rsync runs with `--no-owner --no-group`. All restored
+  files end up owned by the running user (`whoami`:`staff`). No `sudo`
+  required, no `chown` cleanup needed.
+- **Path patching:** known config files have `/Users/<old>` →
+  `/Users/<new>` sed-replaced after copy. This covers `.zshrc`, `.zprofile`,
+  `.gitconfig`, `.ssh/config`, `.npmrc`, `.tmux.conf`, every LaunchAgent
+  plist, and the crontab. Originals are saved as `<name>.pre-userpatch`.
+  To catch anything else: `grep -rl /Users/<old> $HOME --exclude-dir=Library`.
+- **Group reconciliation:** restore compares the source-user's group list
+  to the new user's. For each missing non-trivial group (e.g. `admin`,
+  `_developer`, `_lpadmin`, `com.apple.access_ssh`), it prints the exact
+  `sudo dseditgroup -o edit -a <newuser> -t user <group>` command to fix it.
+
+---
+
+## What does NOT migrate cleanly
+
+Some things macOS deliberately makes hard to move between machines. The
+restore script reminds you of these at the end:
+
+- **Keychain passwords** — `login.keychain-db` is in the rsync but it depends
+  on the user's password + per-device secrets and usually won't unlock on a
+  new Mac. Use **iCloud Keychain** to bring across Wi-Fi, web, and app
+  passwords. Plan to re-enter SSH key passphrases.
+- **TCC privacy permissions** (camera, mic, screen recording, accessibility,
+  full-disk access) — the TCC database is not migratable. Every app will
+  re-prompt on first use; reauthorize them in System Settings → Privacy &
+  Security.
+- **Bluetooth pairings** — re-pair each device.
+- **Wi-Fi networks** — restored via iCloud Keychain if enabled, otherwise
+  re-enter.
+- **FileVault recovery keys** — per-device, not transferable.
+- **Mail / Calendar / Contacts accounts** — the account *definitions* are in
+  `~/Library/Mail`, `~/Library/Calendars`, `~/Library/Application Support/AddressBook`
+  (excluded from rsync — they re-sync from iCloud / will re-prompt for IMAP
+  passwords). For non-iCloud (CalDAV / CardDAV / Exchange) accounts you'll
+  re-add the server + credentials.
+- **App-specific licenses / activations** — 1Password unlock, JetBrains
+  toolbox, Adobe CC, MS Office, Setapp, etc. expect to re-sign-in.
+- **Touch ID enrollments + passkey hardware** — per-device.
+- **Notification permissions and Focus modes** — re-grant on first run.
+- **System printers + drivers** — `backup.sh --only system` (sudo) captures
+  `/etc/cups/printers.conf` and PPDs; `restore.sh --only system` puts them
+  back. You may still need to re-install vendor driver bundles for some
+  printers.
+- **LaunchDaemons** (`/Library/LaunchDaemons`) — captured/restored by the
+  `system` section (sudo). User-level LaunchAgents are covered by the normal
+  `services` section.
+- **/etc/hosts, /etc/sudoers.d, /etc/ssh/ssh_config.d** — captured by
+  `--only system`. Skipped silently if `sudo` isn't cached when `backup.sh`
+  runs; cache it with `sudo -v` first, then `./backup.sh --only system`.
 
 ---
 

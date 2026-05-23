@@ -40,10 +40,21 @@ log "Backup root: $BACKUP_ROOT"
 log "Source host: $SOURCE_HOST  user: $(whoami)"
 
 # Write a manifest at the top so restore.sh knows what it's reading.
+# Identity fields (uid/gid/groups/full name) are critical for the cross-user
+# restore path — restore.sh translates ownership and patches embedded
+# /Users/<old> paths based on these values.
 cat > "$META_DIR/manifest.txt" <<EOF
 source_host: $SOURCE_HOST
 source_user: $(whoami)
+source_uid: $(id -u)
+source_gid: $(id -g)
+source_primary_group: $(id -gn)
+source_groups: $(id -Gn | tr ' ' ',')
+source_full_name: $(id -F 2>/dev/null || echo "")
 source_home: $HOME
+source_shell: $SHELL
+source_local_hostname: $(scutil --get LocalHostName 2>/dev/null || echo "")
+source_hostname: $(scutil --get HostName 2>/dev/null || echo "")
 backup_time: $TS
 macos_version: $(sw_vers -productVersion)
 arch: $(uname -m)
@@ -113,11 +124,29 @@ fi
 # 4. VS Code / Cursor — extensions and settings
 ###############################################################################
 if run_section vscode; then
-  log "Exporting VS Code / Cursor extensions"
+  log "Exporting VS Code / Cursor extensions + user settings"
   for cli in code cursor code-insiders; do
     if command -v "$cli" >/dev/null 2>&1; then
       "$cli" --list-extensions > "$META_DIR/${cli}-extensions.txt" 2>/dev/null || true
       ok "$cli extensions: $(wc -l < "$META_DIR/${cli}-extensions.txt" | tr -d ' ')"
+    fi
+  done
+  # User settings.json, keybindings.json, snippets/ — these are NOT covered by
+  # --list-extensions but are usually what makes the editor feel like yours.
+  declare -A vsdirs=(
+    [code]="$HOME/Library/Application Support/Code/User"
+    [cursor]="$HOME/Library/Application Support/Cursor/User"
+    [code-insiders]="$HOME/Library/Application Support/Code - Insiders/User"
+  )
+  for key in "${!vsdirs[@]}"; do
+    src="${vsdirs[$key]}"
+    if [[ -d "$src" ]]; then
+      dest="$META_DIR/editor-settings/$key"
+      ensure_dir "$dest"
+      for item in settings.json keybindings.json snippets globalStorage/state.vscdb; do
+        [[ -e "$src/$item" ]] && rsync -a --relative "$src/./$item" "$dest/" 2>/dev/null || true
+      done
+      ok "$key user settings exported"
     fi
   done
 fi
@@ -168,7 +197,7 @@ fi
 # 6. LaunchAgents, crontab, login items
 ###############################################################################
 if run_section services; then
-  log "Exporting LaunchAgents and cron"
+  log "Exporting user-level services and misc helpers"
   ensure_dir "$META_DIR/launchagents"
   if [[ -d "$HOME/Library/LaunchAgents" ]]; then
     rsync -a "$HOME/Library/LaunchAgents/" "$META_DIR/launchagents/"
@@ -177,7 +206,54 @@ if run_section services; then
   # Login items (the user-visible "Open at Login" list).
   osascript -e 'tell application "System Events" to get the name of every login item' \
     > "$META_DIR/login-items.txt" 2>/dev/null || true
+  # Time Machine exclusions — easy to miss, painful to recreate.
+  tmutil listexclusions > "$META_DIR/timemachine-exclusions.txt" 2>/dev/null || true
+  # User-installed fonts (separate from system fonts).
+  if [[ -d "$HOME/Library/Fonts" ]]; then
+    ensure_dir "$META_DIR/user-fonts"
+    rsync -a "$HOME/Library/Fonts/" "$META_DIR/user-fonts/" 2>/dev/null || true
+  fi
+  # Custom keyboard bindings (e.g. DefaultKeyBinding.dict) + Quick Actions.
+  for d in KeyBindings Services "Application Scripts"; do
+    if [[ -d "$HOME/Library/$d" ]]; then
+      ensure_dir "$META_DIR/library/$d"
+      rsync -a "$HOME/Library/$d/" "$META_DIR/library/$d/" 2>/dev/null || true
+    fi
+  done
   ok "Services exported"
+fi
+
+###############################################################################
+# 6b. System-level (sudo) — /etc/hosts, sudoers.d, LaunchDaemons, CUPS, etc.
+# Requires sudo. Skips silently if sudo isn't already cached.
+###############################################################################
+if run_section system; then
+  log "Exporting system-level files (sudo)"
+  if sudo -n true 2>/dev/null; then
+    ensure_dir "$META_DIR/system/etc" "$META_DIR/system/launchdaemons" "$META_DIR/system/cups"
+    # /etc/hosts — almost always has manual edits worth preserving.
+    sudo cp /etc/hosts "$META_DIR/system/etc/hosts" 2>/dev/null || true
+    # /etc/sudoers.d — custom sudo rules (excluding the default empty).
+    if [[ -d /etc/sudoers.d ]]; then
+      sudo rsync -a /etc/sudoers.d/ "$META_DIR/system/etc/sudoers.d/" 2>/dev/null || true
+    fi
+    # /etc/ssh/ssh_config.d — per-machine ssh client tweaks.
+    [[ -d /etc/ssh/ssh_config.d ]] && \
+      sudo rsync -a /etc/ssh/ssh_config.d/ "$META_DIR/system/etc/ssh_config.d/" 2>/dev/null || true
+    # /Library/LaunchDaemons — system-wide background services.
+    if [[ -d /Library/LaunchDaemons ]]; then
+      sudo rsync -a /Library/LaunchDaemons/ "$META_DIR/system/launchdaemons/" 2>/dev/null || true
+    fi
+    # CUPS printers (system-wide).
+    for f in /etc/cups/printers.conf /etc/cups/ppd; do
+      [[ -e "$f" ]] && sudo cp -a "$f" "$META_DIR/system/cups/" 2>/dev/null || true
+    done
+    # Make the copies readable by your user for the rsync to the drive.
+    sudo chown -R "$(whoami):staff" "$META_DIR/system" 2>/dev/null || true
+    ok "System-level files exported"
+  else
+    warn "sudo not cached — run \`sudo -v\` then re-run with --only system to capture /etc/hosts, sudoers.d, LaunchDaemons, CUPS"
+  fi
 fi
 
 ###############################################################################

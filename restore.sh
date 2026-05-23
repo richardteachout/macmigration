@@ -49,6 +49,84 @@ log "Manifest:"
 sed 's/^/  /' "$META_DIR/manifest.txt"
 
 ###############################################################################
+# Identity reconciliation — figure out the old username, point HOME_MIRROR at
+# the right tree, and prepare the cross-user translation maps.
+###############################################################################
+manifest_field() {
+  awk -v k="$1" '$1 == k":" { sub(/^[^:]+:[[:space:]]*/, ""); print; exit }' "$META_DIR/manifest.txt"
+}
+MFST_USER=$(manifest_field source_user)
+MFST_UID=$(manifest_field source_uid)
+MFST_GID=$(manifest_field source_gid)
+MFST_PRIMARY_GROUP=$(manifest_field source_primary_group)
+MFST_GROUPS=$(manifest_field source_groups)
+
+NEW_USER=$(whoami)
+NEW_UID=$(id -u)
+NEW_PRIMARY_GROUP=$(id -gn)
+NEW_GROUPS=$(id -Gn | tr ' ' ',')
+
+# If OLD_USER wasn't set in env, derive it from the manifest, or prompt.
+if [[ -z "${OLD_USER:-}" || "$OLD_USER" == "$NEW_USER" ]]; then
+  if [[ -d "$BACKUP_ROOT/home/$MFST_USER" ]]; then
+    OLD_USER="$MFST_USER"
+  else
+    log "Manifest user '$MFST_USER' not found at $BACKUP_ROOT/home/. Available:"
+    ls -1 "$BACKUP_ROOT/home/" 2>/dev/null | sed 's/^/    /'
+    read -r -p "Enter old username (the directory under $BACKUP_ROOT/home/): " OLD_USER
+  fi
+fi
+HOME_MIRROR="$BACKUP_ROOT/home/$OLD_USER"
+[[ -d "$HOME_MIRROR" ]] || die "No home mirror at $HOME_MIRROR"
+
+CROSS_USER=0
+[[ "$OLD_USER" != "$NEW_USER" ]] && CROSS_USER=1
+log "Source user: $OLD_USER  (uid=$MFST_UID gid=$MFST_GID group=$MFST_PRIMARY_GROUP)"
+log "Target user: $NEW_USER  (uid=$NEW_UID gid=$(id -g) group=$NEW_PRIMARY_GROUP)"
+if [[ "$CROSS_USER" -eq 1 ]]; then
+  warn "Cross-user restore. All restored files will be owned by $NEW_USER:$NEW_PRIMARY_GROUP."
+  warn "Embedded /Users/$OLD_USER paths will be sed-patched in known config files."
+fi
+
+# Group reconciliation — flag any non-system groups the source had that the
+# target doesn't, with a copy-paste fix.
+missing_groups=()
+IFS=',' read -r -a old_groups_arr <<< "$MFST_GROUPS"
+for g in "${old_groups_arr[@]}"; do
+  [[ -z "$g" ]] && continue
+  # Skip groups every macOS user is auto-added to. Keep underscore-prefixed
+  # capability groups (_developer, _lpadmin, _appserveradm, etc.) and named
+  # groups like com.apple.access_ssh — those matter and may be missing.
+  case "$g" in
+    everyone|localaccounts|_analyticsusers|_appstore) continue ;;
+  esac
+  if ! id -Gn | tr ' ' '\n' | grep -qx "$g"; then
+    missing_groups+=("$g")
+  fi
+done
+if [[ ${#missing_groups[@]} -gt 0 ]]; then
+  warn "Target user $NEW_USER is missing these source-user groups: ${missing_groups[*]}"
+  warn "To add them (admin required):"
+  for g in "${missing_groups[@]}"; do
+    warn "  sudo dseditgroup -o edit -a $NEW_USER -t user $g"
+  done
+fi
+
+# Patches embedded /Users/$OLD_USER → /Users/$NEW_USER in the given file.
+# Backs up the original as <file>.pre-userpatch. No-op when not cross-user.
+patch_user_paths() {
+  [[ "$CROSS_USER" -eq 1 ]] || return 0
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  if grep -q "/Users/$OLD_USER" "$f" 2>/dev/null; then
+    cp "$f" "$f.pre-userpatch"
+    # macOS sed: -i '' with a backup-suffix arg.
+    sed -i '' "s|/Users/$OLD_USER|/Users/$NEW_USER|g" "$f"
+    echo "  patched paths in $f"
+  fi
+}
+
+###############################################################################
 # Preflight — ALWAYS runs. Installs Xcode CLT, Homebrew, and mas if missing.
 # Not gated by --only/--skip because every meaningful section needs at least
 # this baseline (and the checks are no-ops when already installed).
@@ -103,8 +181,13 @@ if run_section dotfiles; then
   if [[ -d "$META_DIR/dotfiles" ]]; then
     log "Restoring dotfiles into \$HOME"
     if confirm "Overwrite matching dotfiles in $HOME?"; then
-      rsync -a --backup --suffix=".pre-restore" \
+      rsync -rlptD --backup --suffix=".pre-restore" \
+        --no-owner --no-group \
         "$META_DIR/dotfiles/" "$HOME/"
+      # Cross-user: patch /Users/<old> → /Users/<new> in known config files.
+      while IFS= read -r f; do
+        patch_user_paths "$f"
+      done < <(find "$META_DIR/dotfiles" -type f | sed "s|^$META_DIR/dotfiles|$HOME|")
       ok "Dotfiles restored (any overwritten files saved as *.pre-restore)"
     else
       warn "Skipped dotfiles"
@@ -213,18 +296,34 @@ if run_section services; then
   if [[ -d "$META_DIR/launchagents" ]]; then
     log "Restoring LaunchAgents"
     ensure_dir "$HOME/Library/LaunchAgents"
-    rsync -a "$META_DIR/launchagents/" "$HOME/Library/LaunchAgents/"
-    # Load each plist (ignore already-loaded errors).
+    rsync -rlptD --no-owner --no-group "$META_DIR/launchagents/" "$HOME/Library/LaunchAgents/"
+    # Patch user paths BEFORE loading — a LaunchAgent referencing
+    # /Users/<old>/scripts/foo.sh will fail silently otherwise.
     for plist in "$HOME/Library/LaunchAgents"/*.plist; do
       [[ -f "$plist" ]] || continue
+      patch_user_paths "$plist"
       launchctl load -w "$plist" 2>/dev/null || true
     done
     ok "LaunchAgents restored"
   fi
   if [[ -s "$META_DIR/crontab.txt" ]] && ! grep -q '^# no crontab' "$META_DIR/crontab.txt"; then
     log "Restoring crontab"
-    crontab "$META_DIR/crontab.txt" && ok "crontab installed"
+    # Patch the crontab file (a copy) before installing it.
+    cp "$META_DIR/crontab.txt" "$META_DIR/crontab.staged.txt"
+    if [[ "$CROSS_USER" -eq 1 ]]; then
+      sed -i '' "s|/Users/$OLD_USER|/Users/$NEW_USER|g" "$META_DIR/crontab.staged.txt"
+    fi
+    crontab "$META_DIR/crontab.staged.txt" && ok "crontab installed"
   fi
+  # User fonts + KeyBindings + Services + Application Scripts captured by
+  # backup.sh's services section. Copy them back if present.
+  for d in Fonts KeyBindings Services "Application Scripts"; do
+    src="$META_DIR/library/$d"
+    [[ -d "$src" ]] || { src="$META_DIR/user-fonts"; [[ "$d" == "Fonts" && -d "$src" ]] || continue; }
+    ensure_dir "$HOME/Library/$d"
+    rsync -rlptD --no-owner --no-group "$src/" "$HOME/Library/$d/" 2>/dev/null \
+      && echo "  restored Library/$d"
+  done
 fi
 
 ###############################################################################
@@ -235,26 +334,97 @@ if run_section rsync; then
   if [[ ! -d "$HOME_MIRROR" ]]; then
     warn "No home mirror at $HOME_MIRROR — skipping"
   else
-    # IMPORTANT: no --delete here. We add files from the mirror but don't
-    # remove anything the new Mac already has. This makes the restore safe
-    # to re-run and avoids nuking system-created files in a fresh ~.
-    if [[ -n "$DRY" ]]; then
-      log "Dry run — showing what WOULD change:"
-    fi
-    rsync -ahHPXA --numeric-ids --partial $DRY \
+    # IMPORTANT:
+    #   - No --delete: we add files from the mirror but don't remove anything
+    #     the new Mac already has. Safe to re-run; won't nuke files a fresh
+    #     ~ created on first login.
+    #   - --no-owner --no-group: files end up owned by the running user
+    #     (so cross-user restores Just Work without needing sudo or chown).
+    #   - -rlptDhHPXA: same as -a minus -o/-g, plus extended attrs + ACLs.
+    [[ -n "$DRY" ]] && log "Dry run — showing what WOULD change"
+    rsync -rlptDhHPXA --no-owner --no-group --partial $DRY \
       --exclude-from="$SCRIPT_DIR/rsync-excludes.txt" \
       "$HOME_MIRROR/" "$HOME/" \
       | tee "$META_DIR/restore-$TS.log" >/dev/null
     ok "Home restore complete"
+
+    # Cross-user path patching on a curated set of likely-config files.
+    # Conservative on purpose — we don't sed every file in $HOME.
+    if [[ "$CROSS_USER" -eq 1 && -z "$DRY" ]]; then
+      log "Patching embedded /Users/$OLD_USER paths"
+      patch_targets=(
+        "$HOME/.zshrc" "$HOME/.zprofile" "$HOME/.zshenv" "$HOME/.zlogin" "$HOME/.zlogout"
+        "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" "$HOME/.inputrc"
+        "$HOME/.gitconfig" "$HOME/.config/git/config"
+        "$HOME/.ssh/config"
+        "$HOME/.npmrc" "$HOME/.yarnrc" "$HOME/.yarnrc.yml"
+        "$HOME/.config/starship.toml"
+        "$HOME/.tmux.conf"
+      )
+      for f in "${patch_targets[@]}"; do
+        patch_user_paths "$f"
+      done
+      # LaunchAgents that came in via the rsync (vs the services step).
+      for plist in "$HOME/Library/LaunchAgents"/*.plist; do
+        [[ -f "$plist" ]] && patch_user_paths "$plist"
+      done
+    fi
+  fi
+fi
+
+###############################################################################
+# 8. System-level restore (sudo). Opt-in; not part of the default run.
+# Restore with:  ./restore.sh --only system
+###############################################################################
+if run_section system; then
+  if [[ -d "$META_DIR/system" ]]; then
+    log "Restoring system-level files (sudo)"
+    if confirm "About to copy back /etc/hosts, /etc/sudoers.d, /Library/LaunchDaemons, /etc/cups. Continue?"; then
+      [[ -f "$META_DIR/system/etc/hosts" ]] && \
+        sudo cp "$META_DIR/system/etc/hosts" /etc/hosts && echo "  /etc/hosts"
+      [[ -d "$META_DIR/system/etc/sudoers.d" ]] && \
+        sudo rsync -a "$META_DIR/system/etc/sudoers.d/" /etc/sudoers.d/ && echo "  /etc/sudoers.d"
+      [[ -d "$META_DIR/system/etc/ssh_config.d" ]] && \
+        sudo rsync -a "$META_DIR/system/etc/ssh_config.d/" /etc/ssh/ssh_config.d/ && echo "  /etc/ssh/ssh_config.d"
+      [[ -d "$META_DIR/system/launchdaemons" ]] && \
+        sudo rsync -a "$META_DIR/system/launchdaemons/" /Library/LaunchDaemons/ && echo "  /Library/LaunchDaemons"
+      [[ -f "$META_DIR/system/cups/printers.conf" ]] && \
+        sudo cp "$META_DIR/system/cups/printers.conf" /etc/cups/printers.conf && echo "  CUPS printers.conf"
+      [[ -d "$META_DIR/system/cups/ppd" ]] && \
+        sudo rsync -a "$META_DIR/system/cups/ppd/" /etc/cups/ppd/ && echo "  CUPS PPDs"
+      ok "System-level files restored. You may need to: sudo killall -HUP launchd"
+    else
+      warn "Skipped system restore"
+    fi
   fi
 fi
 
 log "Restore done. Recommended next steps:"
-cat <<'EOF'
+cat <<EOF
   1. Sign into Apple ID / iCloud (Messages, Mail, Photos, Mobile Documents resync)
   2. Sign into App Store, then re-run:  ./restore.sh --only brew
      (mas apps will install once you're signed in)
   3. Run the GUI-only settings script:  osascript macos-settings.applescript
   4. Restart Dock/Finder to apply defaults:  killall Dock Finder SystemUIServer
   5. Open Keychain Access and verify SSH key passphrases / app logins
+  6. Reauthorize app permissions in System Settings → Privacy & Security
+     (the TCC database does NOT migrate — every app re-prompts for camera,
+     mic, accessibility, full-disk access, screen recording, etc.)
+  7. Re-add Wi-Fi networks if you didn't have iCloud Keychain enabled
+  8. Re-pair Bluetooth devices (pairings don't migrate)
+  9. Re-add Calendar/Mail/Contacts accounts if not iCloud (passwords were
+     in the Keychain, which doesn't import cleanly across machines)
 EOF
+if [[ "$CROSS_USER" -eq 1 ]]; then
+  cat <<EOF
+
+  Cross-user restore notes ($OLD_USER → $NEW_USER):
+   - File ownership: all restored files are owned by $NEW_USER:$NEW_PRIMARY_GROUP.
+   - Path patching: dotfiles, LaunchAgents, and crontab had /Users/$OLD_USER
+     → /Users/$NEW_USER replacements. Originals saved as *.pre-userpatch.
+   - Search for any other /Users/$OLD_USER references with:
+       grep -rl "/Users/$OLD_USER" "\$HOME" --exclude-dir=Library 2>/dev/null
+   - If missing groups (admin, _developer, etc.) were flagged above,
+     re-run those \`sudo dseditgroup\` commands.
+EOF
+fi
