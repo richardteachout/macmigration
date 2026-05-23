@@ -15,14 +15,19 @@ destructive-ish steps.
 | --- | --- |
 | [`backup.sh`](backup.sh) | Run on the **OLD** Mac. Writes everything to the drive. |
 | [`restore.sh`](restore.sh) | Run on the **NEW** Mac. Rehydrates from the drive. |
-| [`config.sh`](config.sh) | Shared paths & helpers. Sourced by both scripts. |
+| [`purge.sh`](purge.sh) | Manually delete a backup tree from the external drive. Never auto-invoked. |
+| [`config.sh`](config.sh) | Shared paths & helpers. Sourced by all three scripts. |
 | [`rsync-excludes.txt`](rsync-excludes.txt) | Caches, build artifacts, iCloud, Mail/Messages/Photos. |
 | [`macos-settings.applescript`](macos-settings.applescript) | GUI-only settings (login items, Dock items, etc.). |
 
-Each script is split into numbered sections. Run all of them or use
-`--only <section>` / `--skip <section>` to do one at a time.
+`backup.sh` and `restore.sh` are split into numbered sections. Run all of them
+or use `--only <section>` / `--skip <section>` to do one at a time.
 
-Sections: `brew`, `apps`, `langs`, `vscode`, `defaults`, `services`, `dotfiles`, `rsync` (backup adds nothing else; restore adds `prereqs` first).
+Sections: `brew`, `apps`, `langs`, `vscode`, `defaults`, `services`, `dotfiles`, `rsync`.
+
+`restore.sh` also runs a **preflight** (Xcode CLT + Homebrew + `mas`)
+unconditionally — even with `--only`/`--skip` — because every section needs at
+least the baseline. The checks are no-ops when those are already installed.
 
 ---
 
@@ -136,10 +141,38 @@ huge transfer and sync conflicts).
 
 ---
 
+## Purging the backup
+
+Once you've finished the migration and verified the new Mac works, free up the
+drive with [`purge.sh`](purge.sh). It's **manual only** — `restore.sh` will
+never call it for you.
+
+```bash
+export BACKUP_ROOT=/Volumes/MyDrive/macbackup
+./purge.sh --dry-run            # preview what would be deleted
+./purge.sh                      # delete everything (prompts for "PURGE")
+./purge.sh --meta-only          # keep the home mirror, delete only meta/
+./purge.sh --home-only          # keep meta/, delete only the home mirror
+./purge.sh -y                   # skip the typed confirmation
+```
+
+Safety rails (any one of these aborts the run):
+
+1. `BACKUP_ROOT` must be set (no default).
+2. The canonical path is checked against a blocklist of bare system / top-level
+   paths (`/`, `/Users`, `/Volumes`, `/System`, `/tmp`, etc.).
+3. Path must be at least 3 components deep (so `/Volumes/X` is rejected,
+   `/Volumes/X/macbackup` is OK).
+4. The directory must contain `meta/manifest.txt` or `home/` — otherwise
+   it doesn't look like a macmigration backup and the script refuses.
+5. You must type `PURGE` (in capitals) unless you pass `-y`.
+
+---
+
 ## Customizing
 
-- **Backup destination:** export `BACKUP_ROOT` before running either script,
-  or edit the default in [`config.sh`](config.sh).
+- **Backup destination:** export `BACKUP_ROOT` before running any script.
+  There is no default — see [Prerequisites](#prerequisites).
 - **What rsync copies:** edit [`rsync-excludes.txt`](rsync-excludes.txt).
   Patterns are relative to `$HOME`. If you want Mail, Messages, Photos, or
   iCloud Drive in the mirror, delete the matching lines.

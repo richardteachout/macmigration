@@ -10,6 +10,9 @@
 # Section order matters: brew/langs first (so tools exist), then dotfiles,
 # then defaults, then the home rsync. The home rsync is intentionally LAST
 # and non-destructive by default.
+#
+# Prereqs (Xcode CLT + Homebrew + mas) ALWAYS run before any section, even
+# with --only/--skip. They are install-if-missing and fast when present.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,7 +26,7 @@ while [[ $# -gt 0 ]]; do
     --skip) SKIP="$2"; shift 2 ;;
     --dry-run) DRY="--dry-run"; shift ;;
     -y|--yes) ASSUME_YES=1; shift ;;
-    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) die "Unknown arg: $1" ;;
   esac
 done
@@ -46,28 +49,37 @@ log "Manifest:"
 sed 's/^/  /' "$META_DIR/manifest.txt"
 
 ###############################################################################
-# 0. Xcode CLT + Homebrew (prereqs for almost everything else)
+# Preflight — ALWAYS runs. Installs Xcode CLT, Homebrew, and mas if missing.
+# Not gated by --only/--skip because every meaningful section needs at least
+# this baseline (and the checks are no-ops when already installed).
 ###############################################################################
-if run_section prereqs; then
-  log "Checking prerequisites"
-  if ! xcode-select -p >/dev/null 2>&1; then
-    log "Installing Xcode Command Line Tools (a GUI prompt will appear)"
-    xcode-select --install || true
-    log "Re-run this script after the CLT install finishes."
-    exit 0
-  fi
-  if ! command -v brew >/dev/null 2>&1; then
-    log "Installing Homebrew"
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    # Add brew to PATH for this session (Apple Silicon path).
-    if [[ -x /opt/homebrew/bin/brew ]]; then
-      eval "$(/opt/homebrew/bin/brew shellenv)"
-    elif [[ -x /usr/local/bin/brew ]]; then
-      eval "$(/usr/local/bin/brew shellenv)"
-    fi
-  fi
-  ok "Prereqs OK ($(brew --version | head -1))"
+log "Preflight checks"
+
+# Xcode Command Line Tools — needed by brew, git, and many casks.
+if ! xcode-select -p >/dev/null 2>&1; then
+  log "Installing Xcode Command Line Tools (a GUI prompt will appear)"
+  xcode-select --install || true
+  die "Re-run this script after the CLT install finishes."
 fi
+
+# Homebrew — needed by the brew/langs/vscode sections.
+if ! command -v brew >/dev/null 2>&1; then
+  log "Installing Homebrew"
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  # Add brew to PATH for this session.
+  if   [[ -x /opt/homebrew/bin/brew ]]; then eval "$(/opt/homebrew/bin/brew shellenv)"
+  elif [[ -x /usr/local/bin/brew ]];    then eval "$(/usr/local/bin/brew shellenv)"
+  fi
+fi
+command -v brew >/dev/null 2>&1 || die "Homebrew install appears to have failed."
+
+# mas — needed for Mac App Store apps in the Brewfile (and used by backup.sh).
+if ! command -v mas >/dev/null 2>&1; then
+  log "Installing mas (Mac App Store CLI)"
+  brew install mas || warn "mas install failed — MAS apps in the Brewfile will be skipped"
+fi
+
+ok "Preflight OK ($(brew --version | head -1))"
 
 ###############################################################################
 # 1. Brewfile (taps, formulae, casks, MAS apps)
@@ -105,6 +117,14 @@ fi
 ###############################################################################
 if run_section langs; then
   log "Reinstalling global language packages"
+  # If none of the language CLIs are present, the user likely hasn't applied
+  # the Brewfile yet. Tell them clearly instead of silently no-op-ing.
+  if ! command -v npm  >/dev/null 2>&1 \
+   && ! command -v pipx >/dev/null 2>&1 \
+   && ! command -v uv   >/dev/null 2>&1 \
+   && ! command -v gem  >/dev/null 2>&1; then
+    die "No language CLIs found (npm/pipx/uv/gem). Run \`./restore.sh --only brew\` first to install the Brewfile."
+  fi
   # npm globals
   if [[ -f "$META_DIR/npm-global.json" ]] && command -v npm >/dev/null 2>&1; then
     pkgs=$(/usr/bin/python3 - <<'PY' "$META_DIR/npm-global.json"
@@ -142,6 +162,16 @@ fi
 # 4. VS Code / Cursor extensions
 ###############################################################################
 if run_section vscode; then
+  # If we have at least one extensions list but no matching CLI, the editor
+  # cask probably hasn't been installed yet — point to --only brew.
+  has_list=0; has_cli=0
+  for cli in code cursor code-insiders; do
+    [[ -f "$META_DIR/${cli}-extensions.txt" ]] && has_list=1
+    command -v "$cli" >/dev/null 2>&1 && has_cli=1
+  done
+  if [[ "$has_list" -eq 1 && "$has_cli" -eq 0 ]]; then
+    die "Extension lists exist but no editor CLI (code/cursor) found. Run \`./restore.sh --only brew\` first to install the editor cask."
+  fi
   for cli in code cursor code-insiders; do
     list="$META_DIR/${cli}-extensions.txt"
     if [[ -f "$list" ]] && command -v "$cli" >/dev/null 2>&1; then
