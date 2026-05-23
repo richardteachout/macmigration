@@ -1,0 +1,75 @@
+# rsync excludes for the home-directory mirror.
+# Patterns are relative to the source root (HOME).
+# Anchored patterns start with /; unanchored ones match anywhere.
+
+# --- trash / caches ---
+.Trash
+.cache
+.npm/_cacache
+.yarn/cache
+.pnpm-store
+.gradle/caches
+.m2/repository
+.cargo/registry
+.rustup/toolchains
+.bundle/cache
+.docker
+.colima
+.lima
+.orbstack
+go/pkg
+.kube/cache
+.kube/http-cache
+
+# --- build artifacts (huge, regenerable) ---
+node_modules
+vendor/bundle
+.venv
+venv
+__pycache__
+*.pyc
+.tox
+target
+dist
+build
+.next
+.nuxt
+.parcel-cache
+
+# --- macOS Library subtrees ---
+Library/Caches
+Library/Logs
+Library/Saved Application State
+Library/Application Support/CrashReporter
+Library/Developer/Xcode/DerivedData
+Library/Developer/Xcode/Archives
+Library/Developer/Xcode/iOS DeviceSupport
+Library/Developer/CoreSimulator
+Library/Developer/Xcode/UserData/IDEFindNavigatorScopes
+Library/Containers/*/Data/Library/Caches
+Library/Group Containers/*/Library/Caches
+Library/Application Support/Google/Chrome/*/Cache*
+Library/Application Support/Google/Chrome/*/Code Cache
+Library/Application Support/Google/Chrome/*/GPUCache
+Library/Application Support/Firefox/Profiles/*/cache2
+Library/Application Support/BraveSoftware/Brave-Browser/*/Cache*
+Library/Application Support/com.apple.sharedfilelist
+Library/Application Support/MobileSync/Backup
+
+# --- iCloud-managed (re-syncs after Apple-ID sign-in) ---
+Library/Mobile Documents
+Library/CloudStorage
+
+# --- account-bound, will require re-login anyway ---
+Library/Messages
+Library/Mail
+Library/Mail Downloads
+Pictures/Photos Library.photoslibrary
+Library/Application Support/MobileSync
+
+# --- random noise ---
+.DS_Store
+.Spotlight-V100
+.fseventsd
+.TemporaryItems
+.Trashes
