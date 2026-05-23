@@ -82,10 +82,35 @@ HOME_MIRROR="$BACKUP_ROOT/home/$OLD_USER"
 CROSS_USER=0
 [[ "$OLD_USER" != "$NEW_USER" ]] && CROSS_USER=1
 log "Source user: $OLD_USER  (uid=$MFST_UID gid=$MFST_GID group=$MFST_PRIMARY_GROUP)"
-log "Target user: $NEW_USER  (uid=$NEW_UID gid=$(id -g) group=$NEW_PRIMARY_GROUP)"
-if [[ "$CROSS_USER" -eq 1 ]]; then
-  warn "Cross-user restore. All restored files will be owned by $NEW_USER:$NEW_PRIMARY_GROUP."
-  warn "Embedded /Users/$OLD_USER paths will be sed-patched in known config files."
+NEW_GID=$(id -g)
+log "Target user: $NEW_USER  (uid=$NEW_UID gid=$NEW_GID group=$NEW_PRIMARY_GROUP)"
+
+# Decide how rsync should handle file ownership.
+#  - Same user + matching uid/gid: preserve from the backup (-o -g --numeric-ids).
+#    This keeps file owner/group identical to the source, which matters for
+#    things like ~/.ssh permissions, postgres data dirs, etc.
+#  - Same user but UID or GID differs: warn — preservation requires sudo to
+#    actually chown, so drop owner/group and let files come out owned by the
+#    running user. (Re-run under sudo if you really need the old numeric ids.)
+#  - Different user: same as above — drop owner/group, files owned by
+#    running user. This is the path that needs the /Users/<old> sed pass.
+if [[ "$CROSS_USER" -eq 0 ]] \
+   && [[ "$MFST_UID" == "$NEW_UID" ]] \
+   && [[ "$MFST_GID" == "$NEW_GID" ]]; then
+  RSYNC_OWNER_FLAGS=(--owner --group --numeric-ids)
+  PRESERVE_OWNER=1
+  log "Ownership: preserving from backup (--owner --group --numeric-ids)"
+else
+  RSYNC_OWNER_FLAGS=(--no-owner --no-group)
+  PRESERVE_OWNER=0
+  if [[ "$CROSS_USER" -eq 1 ]]; then
+    warn "Cross-user restore. Restored files will be owned by $NEW_USER:$NEW_PRIMARY_GROUP."
+    warn "Embedded /Users/$OLD_USER paths will be sed-patched in known config files."
+  else
+    warn "Same username but UID/GID differ ($MFST_UID/$MFST_GID → $NEW_UID/$NEW_GID)."
+    warn "Files will be owned by $NEW_USER. To preserve old numeric IDs instead,"
+    warn "re-run with sudo: \`sudo ./restore.sh --only rsync\`."
+  fi
 fi
 
 # Group reconciliation — flag any non-system groups the source had that the
@@ -182,7 +207,7 @@ if run_section dotfiles; then
     log "Restoring dotfiles into \$HOME"
     if confirm "Overwrite matching dotfiles in $HOME?"; then
       rsync -rlptD --backup --suffix=".pre-restore" \
-        --no-owner --no-group \
+        "${RSYNC_OWNER_FLAGS[@]}" \
         "$META_DIR/dotfiles/" "$HOME/"
       # Cross-user: patch /Users/<old> → /Users/<new> in known config files.
       while IFS= read -r f; do
@@ -296,7 +321,7 @@ if run_section services; then
   if [[ -d "$META_DIR/launchagents" ]]; then
     log "Restoring LaunchAgents"
     ensure_dir "$HOME/Library/LaunchAgents"
-    rsync -rlptD --no-owner --no-group "$META_DIR/launchagents/" "$HOME/Library/LaunchAgents/"
+    rsync -rlptD "${RSYNC_OWNER_FLAGS[@]}" "$META_DIR/launchagents/" "$HOME/Library/LaunchAgents/"
     # Patch user paths BEFORE loading — a LaunchAgent referencing
     # /Users/<old>/scripts/foo.sh will fail silently otherwise.
     for plist in "$HOME/Library/LaunchAgents"/*.plist; do
@@ -321,7 +346,7 @@ if run_section services; then
     src="$META_DIR/library/$d"
     [[ -d "$src" ]] || { src="$META_DIR/user-fonts"; [[ "$d" == "Fonts" && -d "$src" ]] || continue; }
     ensure_dir "$HOME/Library/$d"
-    rsync -rlptD --no-owner --no-group "$src/" "$HOME/Library/$d/" 2>/dev/null \
+    rsync -rlptD "${RSYNC_OWNER_FLAGS[@]}" "$src/" "$HOME/Library/$d/" 2>/dev/null \
       && echo "  restored Library/$d"
   done
 fi
@@ -338,11 +363,12 @@ if run_section rsync; then
     #   - No --delete: we add files from the mirror but don't remove anything
     #     the new Mac already has. Safe to re-run; won't nuke files a fresh
     #     ~ created on first login.
-    #   - --no-owner --no-group: files end up owned by the running user
-    #     (so cross-user restores Just Work without needing sudo or chown).
+    #   - Ownership flags: set above based on user/UID/GID match. When the
+    #     user is the same AND uids/gids match, we preserve numerically;
+    #     otherwise files end up owned by the running user.
     #   - -rlptDhHPXA: same as -a minus -o/-g, plus extended attrs + ACLs.
     [[ -n "$DRY" ]] && log "Dry run — showing what WOULD change"
-    rsync -rlptDhHPXA --no-owner --no-group --partial $DRY \
+    rsync -rlptDhHPXA "${RSYNC_OWNER_FLAGS[@]}" --partial $DRY \
       --exclude-from="$SCRIPT_DIR/rsync-excludes.txt" \
       "$HOME_MIRROR/" "$HOME/" \
       | tee "$META_DIR/restore-$TS.log" >/dev/null

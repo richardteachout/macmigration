@@ -158,11 +158,15 @@ and stores the home mirror under `home/<oldname>/`.
   prompts: `Enter old username:`.
 - You can also pre-set it: `OLD_USER=oldjoe ./restore.sh`.
 
-What the cross-user path does differently:
+**Ownership behaviour** is chosen automatically based on the identity match:
 
-- **Ownership:** the rsync runs with `--no-owner --no-group`. All restored
-  files end up owned by the running user (`whoami`:`staff`). No `sudo`
-  required, no `chown` cleanup needed.
+| New Mac vs. backup | rsync flags | Result |
+| --- | --- | --- |
+| Same username **and** same UID/GID | `--owner --group --numeric-ids` | Ownership preserved verbatim from the backup (matters for `~/.ssh`, postgres data dirs, etc.). |
+| Same username, different UID or GID | `--no-owner --no-group` | Files end up owned by the running user. Restore warns you and suggests `sudo ./restore.sh --only rsync` if you really want the old numeric IDs. |
+| Different username | `--no-owner --no-group` + path patching | Files owned by the running user, `/Users/<old>` paths sed-patched. No sudo needed. |
+
+What the cross-user path does additionally:
 - **Path patching:** known config files have `/Users/<old>` →
   `/Users/<new>` sed-replaced after copy. This covers `.zshrc`, `.zprofile`,
   `.gitconfig`, `.ssh/config`, `.npmrc`, `.tmux.conf`, every LaunchAgent
