@@ -295,7 +295,12 @@ if run_section rsync; then
   ensure_dir "$HOME_MIRROR"
   # -a archive, -h human, -P partial+progress, -H preserve hardlinks, -X xattrs, -A ACLs
   # --numeric-ids: don't try to map uid/gid (you'll restore as your new user)
-  # --delete-excluded: don't keep old cache cruft from prior runs
+  # --delete-excluded: PRUNE files on the backup that now match an exclude
+  #   pattern. This is why the backup size can SHRINK between runs (e.g. caches
+  #   captured by an interrupted earlier run get purged on the next run, or
+  #   you tightened rsync-excludes.txt). There is NO plain --delete, so files
+  #   deleted from $HOME are kept on the backup — only excluded paths get
+  #   removed. If you want strictly additive backups, drop --delete-excluded.
   rsync -ahHP --numeric-ids --partial --delete-excluded \
     --exclude-from="$excludes" \
     "$HOME/" "$HOME_MIRROR/" \

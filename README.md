@@ -89,6 +89,17 @@ When it finishes, the drive layout is:
     └── rsync-<timestamp>.log
 ```
 
+### Why does the backup size sometimes *shrink* between runs?
+
+The home mirror uses `--delete-excluded`, which **removes files on the
+backup that match an exclude pattern** (e.g. `Library/Caches`, `node_modules`).
+This is intentional — it keeps the backup from accumulating stale cache
+cruft that an interrupted earlier run may have copied before reaching its
+exclude rule. There is **no plain `--delete`**, so files you delete from
+`$HOME` are still kept on the backup. Only paths matching `rsync-excludes.txt`
+get pruned. If you'd rather have a strictly-additive backup, drop
+`--delete-excluded` from the rsync line in [`backup.sh`](backup.sh).
+
 ---
 
 ## New Mac — restore
