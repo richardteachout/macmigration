@@ -6,7 +6,16 @@
 set -u
 
 # ---- Where the backup lives on the external drive ----
-: "${BACKUP_ROOT:=/Volumes/Backups/macmigration}"
+# BACKUP_ROOT MUST be set in the environment — no default. This is intentional
+# so you can't accidentally write a multi-GB backup to the wrong path.
+#   export BACKUP_ROOT=/Volumes/YourDrive/macbackup
+if [[ -z "${BACKUP_ROOT:-}" ]]; then
+  printf '\033[1;31m[err ]\033[0m BACKUP_ROOT is not set.\n' >&2
+  printf '  Export it before running, e.g.:\n' >&2
+  printf '    export BACKUP_ROOT=/Volumes/YourDrive/macbackup\n' >&2
+  printf '    %s\n' "$(basename "${BASH_SOURCE[1]:-script}")" >&2
+  exit 1
+fi
 
 # Per-user home rsync target (mirrors the home tree).
 : "${HOME_MIRROR:=$BACKUP_ROOT/home/$(whoami)}"

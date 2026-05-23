@@ -31,8 +31,15 @@ Sections: `brew`, `apps`, `langs`, `vscode`, `defaults`, `services`, `dotfiles`,
 - An external drive (USB / Thunderbolt). **Use an encrypted format** (APFS
   Encrypted, or FileVault on the volume) — the backup will contain `~/.ssh`,
   `~/.aws`, `~/.gnupg`, browser profiles, and other secrets in plaintext.
-- On the old Mac: Homebrew + `mas` (`brew install mas`) so MAS apps make it
-  into the Brewfile.
+- **`BACKUP_ROOT` must be set in your environment.** Both scripts refuse to
+  run without it — there is no default, so you can't accidentally write a
+  multi-GB backup to the wrong path:
+  ```bash
+  export BACKUP_ROOT=/Volumes/YourDrive/macbackup
+  ```
+- On the old Mac: Homebrew **and `mas`** (`brew install mas`). `backup.sh`
+  hard-fails if `mas` is missing — otherwise your Mac App Store apps would be
+  silently dropped from the Brewfile.
 - On the new Mac: nothing. `restore.sh` installs Xcode CLT and Homebrew on
   first run.
 
@@ -44,8 +51,9 @@ Sections: `brew`, `apps`, `langs`, `vscode`, `defaults`, `services`, `dotfiles`,
 # Clone or copy the scripts somewhere, then:
 cd macmigration
 
-# Default backup root is /Volumes/Backups/macmigration — override if needed.
-BACKUP_ROOT=/Volumes/MyDrive/macbackup ./backup.sh
+# BACKUP_ROOT is required — scripts exit immediately if it's unset.
+export BACKUP_ROOT=/Volumes/MyDrive/macbackup
+./backup.sh
 ```
 
 Run sections individually if you want to iterate:
@@ -84,8 +92,9 @@ When it finishes, the drive layout is:
 git clone https://github.com/richardteachout/macmigration.git
 cd macmigration
 
-# Plug in the drive, then:
-BACKUP_ROOT=/Volumes/MyDrive/macbackup ./restore.sh
+# Plug in the drive, then (BACKUP_ROOT is required):
+export BACKUP_ROOT=/Volumes/MyDrive/macbackup
+./restore.sh
 ```
 
 The script will:

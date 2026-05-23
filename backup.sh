@@ -2,10 +2,13 @@
 # backup.sh — run on the OLD Mac to snapshot everything to the external drive.
 #
 # Usage:
+#   export BACKUP_ROOT=/Volumes/YourDrive/macbackup   # REQUIRED — no default
 #   ./backup.sh                 # full run
 #   ./backup.sh --skip-rsync    # everything except the home mirror (fast)
 #   ./backup.sh --only rsync    # just the home mirror
-#   BACKUP_ROOT=/Volumes/X ./backup.sh
+#
+# Requirements: Homebrew + mas. The script exits if mas is missing (otherwise
+# Mac App Store apps would be silently dropped from the Brewfile).
 #
 # Each section is independent — comment out anything you don't want.
 
@@ -20,7 +23,7 @@ while [[ $# -gt 0 ]]; do
     --only) ONLY="$2"; shift 2 ;;
     --skip) SKIP="$2"; shift 2 ;;
     --skip-rsync) SKIP="rsync"; shift ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,13p' "$0"; exit 0 ;;
     *) die "Unknown arg: $1" ;;
   esac
 done
@@ -52,10 +55,11 @@ EOF
 if run_section brew; then
   log "Exporting Homebrew bundle"
   if command -v brew >/dev/null 2>&1; then
-    # Install mas first if missing so the Brewfile picks up App Store apps.
+    # mas is required so the Brewfile picks up Mac App Store apps.
+    # Skip the check with: ./backup.sh --skip brew  (or run without mas at
+    # your own risk by editing this block).
     if ! command -v mas >/dev/null 2>&1; then
-      warn "mas not installed — Mac App Store apps will be omitted from Brewfile."
-      warn "Install with: brew install mas"
+      die "mas not installed — Mac App Store apps would be silently omitted. Install with: brew install mas"
     fi
     brew bundle dump --force --file="$META_DIR/Brewfile"
     brew list --formula --versions > "$META_DIR/brew-formulae.txt"
@@ -216,7 +220,7 @@ if run_section rsync; then
   # -a archive, -h human, -P partial+progress, -H preserve hardlinks, -X xattrs, -A ACLs
   # --numeric-ids: don't try to map uid/gid (you'll restore as your new user)
   # --delete-excluded: don't keep old cache cruft from prior runs
-  rsync -ahHPXA --numeric-ids --partial --delete-excluded \
+  rsync -ahHP --numeric-ids --partial --delete-excluded \
     --exclude-from="$excludes" \
     "$HOME/" "$HOME_MIRROR/" \
     | tee "$META_DIR/rsync-$TS.log" \
