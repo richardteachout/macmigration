@@ -133,22 +133,22 @@ if run_section vscode; then
   done
   # User settings.json, keybindings.json, snippets/ — these are NOT covered by
   # --list-extensions but are usually what makes the editor feel like yours.
-  declare -A vsdirs=(
-    [code]="$HOME/Library/Application Support/Code/User"
-    [cursor]="$HOME/Library/Application Support/Cursor/User"
-    [code-insiders]="$HOME/Library/Application Support/Code - Insiders/User"
-  )
-  for key in "${!vsdirs[@]}"; do
-    src="${vsdirs[$key]}"
-    if [[ -d "$src" ]]; then
-      dest="$META_DIR/editor-settings/$key"
-      ensure_dir "$dest"
-      for item in settings.json keybindings.json snippets globalStorage/state.vscdb; do
-        [[ -e "$src/$item" ]] && rsync -a --relative "$src/./$item" "$dest/" 2>/dev/null || true
-      done
-      ok "$key user settings exported"
-    fi
-  done
+  # NOTE: no associative arrays here on purpose — macOS ships bash 3.2 which
+  # doesn't support `declare -A`.
+  copy_editor_settings() {
+    local key="$1" src="$2"
+    [[ -d "$src" ]] || return 0
+    local dest="$META_DIR/editor-settings/$key"
+    ensure_dir "$dest"
+    local item
+    for item in settings.json keybindings.json snippets globalStorage/state.vscdb; do
+      [[ -e "$src/$item" ]] && rsync -a --relative "$src/./$item" "$dest/" 2>/dev/null || true
+    done
+    ok "$key user settings exported"
+  }
+  copy_editor_settings "code"          "$HOME/Library/Application Support/Code/User"
+  copy_editor_settings "cursor"        "$HOME/Library/Application Support/Cursor/User"
+  copy_editor_settings "code-insiders" "$HOME/Library/Application Support/Code - Insiders/User"
 fi
 
 ###############################################################################
