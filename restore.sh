@@ -113,6 +113,21 @@ else
   fi
 fi
 
+RSYNC_METADATA_FLAGS=()
+RSYNC_HELP="$(rsync --help 2>&1 || true)"
+if grep -q -- '--extended-attributes' <<< "$RSYNC_HELP"; then
+  RSYNC_METADATA_FLAGS+=(--extended-attributes)
+elif grep -q -- '--xattrs' <<< "$RSYNC_HELP"; then
+  RSYNC_METADATA_FLAGS+=(--xattrs)
+else
+  warn "rsync does not advertise extended-attribute support; xattrs/resource forks may not be restored."
+fi
+if grep -q -- '--acls' <<< "$RSYNC_HELP"; then
+  RSYNC_METADATA_FLAGS+=(--acls)
+else
+  warn "rsync does not advertise ACL support; ACLs may not be restored."
+fi
+
 # Group reconciliation — flag any non-system groups the source had that the
 # target doesn't, with a copy-paste fix.
 missing_groups=()
@@ -192,7 +207,7 @@ if run_section brew; then
     log "Installing from Brewfile"
     # mas needs you to be signed into the App Store first. We don't sign in for
     # you — if mas can't list, brew bundle will skip those lines with a warning.
-    brew bundle --file="$META_DIR/Brewfile" || warn "Brewfile finished with errors (often MAS — sign in to App Store and re-run)"
+    yes YES | brew bundle --file="$META_DIR/Brewfile" || warn "Brewfile finished with errors (often MAS — sign in to App Store and re-run)"
     ok "Brewfile applied"
   else
     warn "No Brewfile found — skipping"
@@ -250,13 +265,21 @@ PY
   fi
   # pipx
   if [[ -f "$META_DIR/pipx-list.json" ]] && command -v pipx >/dev/null 2>&1; then
-    pkgs=$(/usr/bin/python3 -c '
+    pkgs=$(/usr/bin/python3 - <<'PY' "$META_DIR/pipx-list.json" "$(pipx list --json 2>/dev/null || printf '{}')"
 import json, sys
-d=json.load(open("'"$META_DIR/pipx-list.json"'"))
-for p in d.get("venvs",{}):
-    print(p)
-')
-    [[ -n "$pkgs" ]] && echo "$pkgs" | xargs -n1 pipx install || true
+
+wanted = json.load(open(sys.argv[1])).get("venvs", {})
+installed = json.loads(sys.argv[2]).get("venvs", {})
+for package in wanted:
+    if package not in installed:
+        print(package)
+PY
+)
+    if [[ -n "$pkgs" ]]; then
+      echo "$pkgs" | xargs -n1 pipx install || true
+    else
+      log "  pipx packages already installed"
+    fi
   fi
   # uv tools
   if [[ -f "$META_DIR/uv-tools.txt" ]] && command -v uv >/dev/null 2>&1; then
@@ -366,12 +389,13 @@ if run_section rsync; then
     #   - Ownership flags: set above based on user/UID/GID match. When the
     #     user is the same AND uids/gids match, we preserve numerically;
     #     otherwise files end up owned by the running user.
-    #   - -rlptDhHPXA: same as -a minus -o/-g, plus extended attrs + ACLs.
+    #   - -rlptDhHPvv: same as -a minus -o/-g, with visible progress and
+    #     verbose filter/output; metadata flags are detected above.
     [[ -n "$DRY" ]] && log "Dry run — showing what WOULD change"
-    rsync -rlptDhHPXA "${RSYNC_OWNER_FLAGS[@]}" --partial $DRY \
+    rsync -rlptDhHPvv "${RSYNC_OWNER_FLAGS[@]}" "${RSYNC_METADATA_FLAGS[@]}" --partial $DRY \
       --exclude-from="$SCRIPT_DIR/rsync-excludes.txt" \
       "$HOME_MIRROR/" "$HOME/" \
-      | tee "$META_DIR/restore-$TS.log" >/dev/null
+      2>&1 | tee "$META_DIR/restore-$TS.log"
     ok "Home restore complete"
 
     # Cross-user path patching on a curated set of likely-config files.
