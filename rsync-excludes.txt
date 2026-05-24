@@ -2,6 +2,13 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/Group Containers/
+Library/Daemon
+com.apple.AddressBook.plist
+CoreSpotlight/SpotlightKnowledge/index.V2
+Library/Application Support/GeoComply/
+Library/Application Support/FileProvider/2E2D6C4E-4D9A-42ED-BC85-88ACCC5A27FA/wharf/
+
 # --- trash / caches ---
 .Trash
 .cache

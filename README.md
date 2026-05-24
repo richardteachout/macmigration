@@ -100,6 +100,10 @@ exclude rule. There is **no plain `--delete`**, so files you delete from
 get pruned. If you'd rather have a strictly-additive backup, drop
 `--delete-excluded` from the rsync line in [`backup.sh`](backup.sh).
 
+During the home mirror, `backup.sh` runs `rsync` with visible progress and
+double-verbose output. Paths skipped by `rsync-excludes.txt` show up as filter
+messages in the terminal and in `meta/rsync-<timestamp>.log`.
+
 ---
 
 ## New Mac — restore
