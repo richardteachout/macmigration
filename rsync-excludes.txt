@@ -17,6 +17,8 @@ Library/Logs/
 macmigration
 Library/AppleMediaServices/Accounts/
 Library/AppleMediaServices
+Library/Application Support/default.store
+
 
 # --- trash / caches ---
 .Trash
