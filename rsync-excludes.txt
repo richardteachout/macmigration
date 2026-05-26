@@ -7,7 +7,7 @@ Library/Daemon
 com.apple.AddressBook.plist
 CoreSpotlight/SpotlightKnowledge/index.V2
 Library/Application Support/GeoComply/
-Library/Application Support/FileProvider/2E2D6C4E-4D9A-42ED-BC85-88ACCC5A27FA/wharf/
+Library/Application Support/FileProvider/
 Library/Application Support/rancher-desktop/
 Library/Accounts/.~tmp~/
 Library/Caches/
@@ -19,10 +19,10 @@ Library/AppleMediaServices/Accounts/
 Library/AppleMediaServices
 Library/Application Support/default.store
 Library/Application Support/default.store-shm
-Library/Application Support/AddressBook/Metadata/1E0E4BE9-BB36-4888-8C20-A1DC9D5C4349:ABPerson.abcdp
+Library/Application Support/AddressBook/Metadata
 Library/Application Support/AddressBook/Sources
 Library/Application Support/Adobe/
-
+Library/Application Support/Animoji/
 
 # --- trash / caches ---
 .Trash
