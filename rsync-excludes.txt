@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/com.apple.aiml.instrumentation/
 Library/com.apple.AppleMediaServices/
 Library/WebKit
 Library/Weather
