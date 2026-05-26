@@ -2,7 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
-Music/Music
+Music/
 Notes/
 Notes/reMarkable/
 Pictures/
