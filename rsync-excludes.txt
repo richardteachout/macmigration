@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/Spelling
 Library/Shortcuts
 Library/Saved Searches
 Library/SafariSafeBrowsing/
