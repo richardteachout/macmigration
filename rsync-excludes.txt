@@ -25,7 +25,11 @@ Library/Application Support/Adobe/
 Library/Application Support/Animoji/
 Library/Application Support/App Store
 Library/Application Support/Caches/cron-updater/pending/
-Library/Application Support/Cachesi
+Library/Application Support/Caches
+Library/Application Support/Caches/notion-updater/
+Library/Application Support/CloudDocs/
+Library/Application Support/
+
 
 # --- trash / caches ---
 .Trash
