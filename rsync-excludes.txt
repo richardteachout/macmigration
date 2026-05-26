@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/HTTPStorages/com.apple.MobileSMS.binarycookies
 Library/HTTPStorages/AtlasUpdateHelper.binarycookies
 Library/FrontBoard
 Library/Finance/
