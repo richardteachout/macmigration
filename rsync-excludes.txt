@@ -13,7 +13,7 @@ go/
 nvidia-workbench/
 intent/
 bin/
-Public/Drop Box/
+Public/
 Parallels/
 Music/Music/Music Library.musiclibrary/
 Music/Music/Media.localized/
