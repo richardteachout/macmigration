@@ -2,6 +2,13 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+.DS_Store
+.localized
+.Trashes
+.Spotlight-V100
+.fseventsd
+
+nvidia-workbench/
 intent/
 bin/
 Public/Drop Box/
