@@ -29,7 +29,7 @@ Library/Application Support/Caches
 Library/Application Support/Caches/notion-updater/
 Library/Application Support/CloudDocs/
 Library/Application Support/
-
+Library/Assistant/CustomVocabulary/com.apple.iChat/
 
 # --- trash / caches ---
 .Trash
