@@ -16,6 +16,7 @@ Library/Logs/
 .~tmp~
 macmigration
 Library/AppleMediaServices/Accounts/
+Library/AppleMediaServices
 
 # --- trash / caches ---
 .Trash
