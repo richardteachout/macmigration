@@ -2,6 +2,8 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Movies/iMovie Theater.theater/
+Movies/iMovie Library.imovielibrary/
 Movies/TV/TV Library.tvlibrary/
 Movies/TV/Media.localized/
 desktop.ini
