@@ -21,7 +21,7 @@ Library/Application Support/default.store
 Library/Application Support/default.store-shm
 Library/Application Support/AddressBook/Metadata/1E0E4BE9-BB36-4888-8C20-A1DC9D5C4349:ABPerson.abcdp
 Library/Application Support/AddressBook/Sources
-Library/Application Support/Adobe/AcroCef/DC/Acrobat/Cache/Cookies
+Library/Application Support/Adobe/
 
 
 # --- trash / caches ---
