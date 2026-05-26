@@ -23,6 +23,9 @@ Library/Application Support/AddressBook/Metadata
 Library/Application Support/AddressBook/Sources
 Library/Application Support/Adobe/
 Library/Application Support/Animoji/
+Library/Application Support/App Store
+Library/Application Support/Caches/cron-updater/pending/
+Library/Application Support/Cachesi
 
 # --- trash / caches ---
 .Trash
