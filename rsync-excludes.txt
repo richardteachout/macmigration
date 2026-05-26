@@ -3,6 +3,7 @@
 # Anchored patterns start with /; unanchored ones match anywhere.
 
 Parallels/*/*.dat
+Parallels/*/*.iso
 Parallels/*/*.tnvs
 Music/Music/Music Library.musiclibrary/
 Music/Music/Media.localized/
