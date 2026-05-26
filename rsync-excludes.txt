@@ -2,7 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
-Library/Assistant/LLMCache/
+Library/Assistant/
 Library/Group Containers/
 Library/Daemon
 com.apple.AddressBook.plist
