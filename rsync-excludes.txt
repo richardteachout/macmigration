@@ -3,6 +3,7 @@
 # Anchored patterns start with /; unanchored ones match anywhere.
 
 Parallels/*/*.dat
+Parallels/*/*.tnvs
 Music/Music/Music Library.musiclibrary/
 Music/Music/Media.localized/
 Music/WhatsMinerTool-9.2.1_1758786027296.rar
