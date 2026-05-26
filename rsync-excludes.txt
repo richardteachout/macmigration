@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/WebKit/coma
 Library/WebKit/com.adobe.Reader/WebsiteData/
 Library/Weather
 Library/UnifiedAssetFramework/
