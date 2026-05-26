@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Movies/TV/Media.localized/
 desktop.ini
 Library/homeenergyd/com.apple.homeenergyd/
 Library/com.apple.internal.ck/
