@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Parallels/*/*.dat
 Music/Music/Music Library.musiclibrary/
 Music/Music/Media.localized/
 Music/WhatsMinerTool-9.2.1_1758786027296.rar
