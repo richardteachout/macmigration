@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Music/OpenVPN Server.ovpn
 Music/.localized
 Movies/iMovie Theater.theater/
 Movies/iMovie Library.imovielibrary/
