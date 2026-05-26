@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/Compositions/
 Library/Preferences/.GlobalPreferences
 Library/Preferences/.GlobalPreferences.plist
 Library/Preferences/
