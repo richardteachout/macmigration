@@ -3,6 +3,7 @@
 # Anchored patterns start with /; unanchored ones match anywhere.
 
 Library/Spelling
+Library/Spotlight
 Library/Shortcuts
 Library/Saved Searches
 Library/SafariSafeBrowsing/
