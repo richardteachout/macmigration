@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/Microsoft/MicrosoftSoftwareUpdate/
 Library/Parallels/Applications Menus/
 Library/News
 Library/Metadata
