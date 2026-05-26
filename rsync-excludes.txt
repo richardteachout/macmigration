@@ -2,8 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
-Library/Biome/sets/Default/
-Library/Biome/compute/sessions/
+Library/Biome/
 Library/Assistant/
 Library/Group Containers/
 Library/Daemon
