@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/KeyboardServices/
 Library/Intents/Images/
 Library/IdentityServices/RegistrationOperations/
 Library/IdentityServices/Persistence/
