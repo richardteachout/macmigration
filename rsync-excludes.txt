@@ -13,7 +13,8 @@ Library/Accounts/.~tmp~/
 Library/Caches/
 Library/Logs/
 .Trash/
-
+.~tmp~
+macmigration
 # --- trash / caches ---
 .Trash
 .cache
