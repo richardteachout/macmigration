@@ -1,7 +1,7 @@
 # rsync excludes for the home-directory mirror.
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
-
+Library/Colors
 Library/ContainerManager/
 Library/Cookies/
 Library/CoreFollowUp/
