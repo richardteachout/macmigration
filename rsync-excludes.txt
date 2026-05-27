@@ -3,6 +3,7 @@
 # Anchored patterns start with /; unanchored ones match anywhere.
 
 
+Library/Autosave Information/
 Library/ColorPickers/
 Library/Colors
 Library/ContainerManager/
