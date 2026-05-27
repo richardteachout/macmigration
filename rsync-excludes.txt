@@ -2,6 +2,7 @@
 # Patterns are relative to the source root (HOME).
 # Anchored patterns start with /; unanchored ones match anywhere.
 
+Library/Assistants/
 Library/Audio/
 Library/Autosave Information/
 Library/ColorPickers/
