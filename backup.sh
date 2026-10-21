@@ -293,7 +293,9 @@ if run_section rsync; then
   excludes="$SCRIPT_DIR/rsync-excludes.txt"
   [[ -f "$excludes" ]] || die "Missing $excludes"
   ensure_dir "$HOME_MIRROR"
-  # -a archive, -h human, -P partial+progress, -H preserve hardlinks, -X xattrs, -A ACLs
+  detect_rsync_metadata_flags
+  # -a archive, -h human, -P partial+progress, -H preserve hardlinks
+  # RSYNC_METADATA_FLAGS: xattrs/ACLs, whichever this rsync supports (config.sh).
   # -vv shows rsync's filter decisions, including excluded/skipped paths.
   # --numeric-ids: don't try to map uid/gid (you'll restore as your new user)
   # --delete-excluded: PRUNE files on the backup that now match an exclude
@@ -302,7 +304,7 @@ if run_section rsync; then
   #   you tightened rsync-excludes.txt). There is NO plain --delete, so files
   #   deleted from $HOME are kept on the backup — only excluded paths get
   #   removed. If you want strictly additive backups, drop --delete-excluded.
-  rsync -ahHPvv --numeric-ids --partial --delete-excluded \
+  rsync -ahHPvv ${RSYNC_METADATA_FLAGS[@]+"${RSYNC_METADATA_FLAGS[@]}"} --numeric-ids --partial --delete-excluded \
     --exclude-from="$excludes" \
     "$HOME/" "$HOME_MIRROR/" \
     2>&1 | tee "$META_DIR/rsync-$TS.log"

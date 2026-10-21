@@ -43,10 +43,31 @@ ok()   { printf '\033[1;32m[ ok ]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[err ]\033[0m %s\n' "$*" >&2; exit 1; }
 
-ensure_dir() { mkdir -p "$1"; }
+ensure_dir() { mkdir -p "$@"; }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "Required command not found: $1"
+}
+
+# Sets RSYNC_METADATA_FLAGS to whichever xattr/ACL flags this rsync supports.
+# Homebrew rsync 3.x uses --xattrs/--acls. macOS's openrsync advertises
+# --extended-attributes, but it aborts the whole transfer when a filename is
+# too long for its ._AppleDouble sidecar (e.g. Chrome-for-Testing helpers in
+# ~/.cache/puppeteer), so it is deliberately NOT used.
+detect_rsync_metadata_flags() {
+  RSYNC_METADATA_FLAGS=()
+  local help
+  help="$(rsync --help 2>&1 || true)"
+  if grep -q -- '--xattrs' <<< "$help"; then
+    RSYNC_METADATA_FLAGS+=(--xattrs)
+  else
+    warn "rsync is openrsync (or lacks --xattrs); xattrs/resource forks will not be copied."
+  fi
+  if grep -q -- '--acls' <<< "$help"; then
+    RSYNC_METADATA_FLAGS+=(--acls)
+  else
+    warn "rsync does not advertise ACL support; ACLs will not be copied (brew install rsync for ACLs)."
+  fi
 }
 
 # Confirm backup volume is mounted and writable (used by backup.sh).
