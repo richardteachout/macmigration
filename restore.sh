@@ -113,20 +113,7 @@ else
   fi
 fi
 
-RSYNC_METADATA_FLAGS=()
-RSYNC_HELP="$(rsync --help 2>&1 || true)"
-if grep -q -- '--extended-attributes' <<< "$RSYNC_HELP"; then
-  RSYNC_METADATA_FLAGS+=(--extended-attributes)
-elif grep -q -- '--xattrs' <<< "$RSYNC_HELP"; then
-  RSYNC_METADATA_FLAGS+=(--xattrs)
-else
-  warn "rsync does not advertise extended-attribute support; xattrs/resource forks may not be restored."
-fi
-if grep -q -- '--acls' <<< "$RSYNC_HELP"; then
-  RSYNC_METADATA_FLAGS+=(--acls)
-else
-  warn "rsync does not advertise ACL support; ACLs may not be restored."
-fi
+detect_rsync_metadata_flags
 
 # Group reconciliation — flag any non-system groups the source had that the
 # target doesn't, with a copy-paste fix.
@@ -392,7 +379,7 @@ if run_section rsync; then
     #   - -rlptDhHPvv: same as -a minus -o/-g, with visible progress and
     #     verbose filter/output; metadata flags are detected above.
     [[ -n "$DRY" ]] && log "Dry run — showing what WOULD change"
-    rsync -rlptDhHPvv "${RSYNC_OWNER_FLAGS[@]}" "${RSYNC_METADATA_FLAGS[@]}" --partial $DRY \
+    rsync -rlptDhHPvv "${RSYNC_OWNER_FLAGS[@]}" ${RSYNC_METADATA_FLAGS[@]+"${RSYNC_METADATA_FLAGS[@]}"} --partial $DRY \
       --exclude-from="$SCRIPT_DIR/rsync-excludes.txt" \
       "$HOME_MIRROR/" "$HOME/" \
       2>&1 | tee "$META_DIR/restore-$TS.log"
